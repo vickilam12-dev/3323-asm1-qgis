@@ -1,0 +1,707 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
+    <link rel="stylesheet" href="css/leaflet.css">
+    <link rel="stylesheet" href="css/qgis2web.css">
+    <link rel="stylesheet" href="css/fontawesome-all.min.css">
+    <link rel="stylesheet" href="css/MarkerCluster.css">
+    <link rel="stylesheet" href="css/MarkerCluster.Default.css">
+    <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { width: 100%; height: 100%; overflow: hidden; font-family: 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif; }
+
+    /* === Layout === */
+    #app { display: flex; width: 100%; height: 100%; }
+
+    /* Left sidebar - filters */
+    #sidebar {
+        width: 280px; min-width: 280px; height: 100%;
+        background: #f8f9fa; border-right: 1px solid #dee2e6;
+        overflow-y: auto; padding: 16px;
+        transition: transform 0.3s ease;
+    }
+
+    /* Center - map */
+    #map-wrapper { flex: 1; height: 100%; position: relative; }
+    #map { width: 100%; height: 100%; }
+
+    /* Right panel - photo + metadata */
+    #detail-panel {
+        width: 340px; min-width: 340px; height: 100%;
+        background: #fff; border-left: 1px solid #dee2e6;
+        overflow-y: auto; padding: 16px;
+        transition: transform 0.3s ease;
+    }
+
+    /* Header */
+    .sidebar-header { font-size: 18px; font-weight: 700; color: #333; margin-bottom: 4px; }
+    .sidebar-sub { font-size: 12px; color: #888; margin-bottom: 14px; }
+
+    /* Filter section */
+    .filter-section { margin-bottom: 16px; }
+    .filter-title {
+        font-size: 13px; font-weight: 600; color: #555; text-transform: uppercase;
+        letter-spacing: 0.5px; margin-bottom: 6px;
+        display: flex; align-items: center; justify-content: space-between;
+    }
+    .filter-title .filter-count { font-size: 11px; color: #aaa; font-weight: 400; }
+
+    /* Checkbox list */
+    .checkbox-list { max-height: 140px; overflow-y: auto; border: 1px solid #e9ecef; border-radius: 6px; background: #fff; }
+    .checkbox-item {
+        display: flex; align-items: center; padding: 6px 10px; cursor: pointer;
+        border-bottom: 1px solid #f1f3f5; transition: background 0.15s;
+    }
+    .checkbox-item:last-child { border-bottom: none; }
+    .checkbox-item:hover { background: #f1f3f5; }
+    .checkbox-item input { margin-right: 8px; accent-color: #e74d61; }
+    .checkbox-item label { font-size: 13px; color: #333; cursor: pointer; flex: 1; }
+    .checkbox-item .item-count { font-size: 11px; color: #bbb; }
+
+    /* Filter actions */
+    .filter-actions { display: flex; gap: 6px; margin-bottom: 12px; }
+    .btn-mini {
+        font-size: 11px; padding: 3px 10px; border: 1px solid #dee2e6;
+        border-radius: 4px; background: #fff; color: #666; cursor: pointer;
+        transition: all 0.15s;
+    }
+    .btn-mini:hover { background: #e74d61; color: #fff; border-color: #e74d61; }
+
+    /* Record count badge */
+    .record-count {
+        position: sticky; bottom: 0; left: 0; right: 0;
+        background: #e74d61; color: #fff; text-align: center;
+        padding: 8px; font-size: 13px; font-weight: 600; border-radius: 6px;
+        margin-top: 8px;
+    }
+
+    /* Detail panel content */
+    .detail-empty { text-align: center; color: #aaa; padding: 40px 20px; font-size: 14px; }
+    .detail-empty i { font-size: 48px; display: block; margin-bottom: 12px; color: #ddd; }
+
+    .detail-photo {
+        display: block;
+        width: 100%;
+        height: auto;
+        max-height: 340px;
+        object-fit: contain;
+        background: #f4f4f4;
+        border-radius: 8px;
+        margin-bottom: 12px;
+        border: 1px solid #eee;
+    }
+    .detail-title { font-size: 16px; font-weight: 700; color: #333; margin-bottom: 10px; }
+    .detail-meta { font-size: 13px; color: #555; }
+    .detail-meta .meta-row {
+        display: flex;
+        gap: 12px;
+        padding: 7px 0;
+        border-bottom: 1px solid #f1f3f5;
+    }
+    .detail-meta .meta-label {
+        flex: 0 0 118px;
+        font-weight: 600;
+        color: #888;
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.3px;
+        line-height: 1.5;
+    }
+    .detail-meta .meta-value {
+        flex: 1 1 auto;
+        min-width: 0;
+        color: #333;
+        word-break: break-word;
+        line-height: 1.5;
+    }
+
+    /* Mobile toggle buttons */
+    .panel-toggle {
+        display: none; position: absolute; top: 10px; z-index: 1000;
+        background: #fff; border: 1px solid #ccc; border-radius: 6px;
+        padding: 6px 12px; font-size: 13px; cursor: pointer; box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+    }
+    #toggle-filters { left: 10px; }
+    #toggle-detail { right: 10px; }
+
+    /* On mobile, move zoom control down so it doesn't collide with the toggle buttons */
+    @media (max-width: 768px) {
+        .leaflet-top.leaflet-left { top: 48px; }
+        .leaflet-bottom.leaflet-right { bottom: 0; }
+    }
+
+    /* Highlighted marker */
+    .highlight-marker {
+        filter: drop-shadow(0 0 8px #ffd700) drop-shadow(0 0 4px #ff8c00);
+    }
+
+    /* Marker cluster override for our custom markers */
+    .custom-marker-icon {
+        background: #e74d61; border: 2px solid #fff; border-radius: 50%;
+        width: 14px; height: 14px; transition: all 0.2s;
+    }
+    .custom-marker-icon.selected {
+        background: #ffd700; border-color: #ff8c00; width: 20px; height: 20px;
+        box-shadow: 0 0 12px rgba(255,140,0,0.7); z-index: 1000 !important;
+    }
+
+    /* Selected marker highlight - clear glow + pulse ring */
+    .marker-selected {
+        filter: drop-shadow(0 0 6px rgba(255,140,0,0.95)) drop-shadow(0 0 14px rgba(255,215,0,0.75));
+        animation: markerPulse 1.4s ease-in-out infinite;
+    }
+    @keyframes markerPulse {
+        0%, 100% { filter: drop-shadow(0 0 5px rgba(255,140,0,0.85)) drop-shadow(0 0 10px rgba(255,215,0,0.6)); }
+        50%      { filter: drop-shadow(0 0 10px rgba(255,140,0,1)) drop-shadow(0 0 20px rgba(255,215,0,0.9)); }
+    }
+
+    /* Scrollbar styling */
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: #f1f1f1; }
+    ::-webkit-scrollbar-thumb { background: #ccc; border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: #aaa; }
+
+    /* === Responsive === */
+    /* Tablet */
+    @media (max-width: 1024px) {
+        #sidebar { width: 220px; min-width: 220px; }
+        #detail-panel { width: 280px; min-width: 280px; }
+    }
+
+    /* Mobile */
+    @media (max-width: 768px) {
+        #app { flex-direction: column; }
+        #sidebar {
+            position: absolute; top: 0; left: 0; width: 85%; max-width: 300px;
+            height: 100%; z-index: 2000; transform: translateX(-100%);
+            box-shadow: 2px 0 10px rgba(0,0,0,0.2);
+        }
+        #sidebar.open { transform: translateX(0); }
+        #detail-panel {
+            position: absolute; top: 0; right: 0; width: 85%; max-width: 320px;
+            height: 100%; z-index: 2000; transform: translateX(100%);
+            box-shadow: -2px 0 10px rgba(0,0,0,0.2);
+        }
+        #detail-panel.open { transform: translateX(0); }
+        #map-wrapper { width: 100%; height: 100%; }
+        .panel-toggle { display: block; }
+        /* overlay */
+        #overlay {
+            display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.3); z-index: 1500;
+        }
+        #overlay.show { display: block; }
+    }
+    </style>
+    <title>3323 Assignment 1 - Custom Map</title>
+</head>
+<body>
+<div id="overlay"></div>
+<div id="app">
+
+    <!-- Left: Filters -->
+    <div id="sidebar">
+        <div class="sidebar-header">Photo Filters</div>
+        <div class="sidebar-sub">3323 Assignment 1 - QGIS Web Map</div>
+
+        <div class="filter-actions">
+            <button class="btn-mini" onclick="selectAllAll()">Select All</button>
+            <button class="btn-mini" onclick="clearAllFilters()">Clear</button>
+        </div>
+
+        <div class="filter-section">
+            <div class="filter-title">Place Name <span class="filter-count" id="count-Place_name"></span></div>
+            <div class="checkbox-list" id="filter-Place_name"></div>
+        </div>
+
+        <div class="filter-section">
+            <div class="filter-title">Photo Subject <span class="filter-count" id="count-object_type"></span></div>
+            <div class="checkbox-list" id="filter-object_type"></div>
+        </div>
+
+        <div class="filter-section">
+            <div class="filter-title">Location Precision <span class="filter-count" id="count-location_precision"></span></div>
+            <div class="checkbox-list" id="filter-location_precision"></div>
+        </div>
+
+        <div class="record-count" id="record-count">0 records</div>
+    </div>
+
+    <!-- Center: Map -->
+    <div id="map-wrapper">
+        <button class="panel-toggle" id="toggle-filters" onclick="togglePanel('sidebar')">
+            <i class="fas fa-filter"></i> Filters
+        </button>
+        <button class="panel-toggle" id="toggle-detail" onclick="togglePanel('detail-panel')">
+            <i class="fas fa-image"></i> Detail
+        </button>
+        <div id="map"></div>
+    </div>
+
+    <!-- Right: Photo + Metadata -->
+    <div id="detail-panel">
+        <div class="detail-empty" id="detail-empty">
+            <i class="fas fa-map-marker-alt"></i>
+            Click a photo marker on the map to view details
+        </div>
+        <div id="detail-content" style="display:none;">
+            <img class="detail-photo" id="detail-photo-img" src="" alt="Photo">
+            <div class="detail-title" id="detail-title"></div>
+            <div class="detail-meta" id="detail-meta"></div>
+        </div>
+    </div>
+
+</div>
+
+<!-- Existing JS dependencies (relative paths) -->
+<script src="js/leaflet.js"></script>
+<script src="js/leaflet.markercluster.js"></script>
+<script src="js/leaflet-hash.js"></script>
+<script src="js/Autolinker.min.js"></script>
+<script src="js/rbush.min.js"></script>
+<script src="js/labelgun.min.js"></script>
+<script src="js/labels.js"></script>
+<script src="js/qgis2web_expressions.js"></script>
+<script src="data/Lam_V_1155209297_Module1_assignment_modified_5.js"></script>
+
+<script>
+(function() {
+    'use strict';
+
+    // === Data: directly from the existing JS variable ===
+    var allFeatures = json_Lam_V_1155209297_Module1_assignment_modified_5.features;
+
+    // === Filter state ===
+    var filterState = {
+        'Place_name': new Set(),
+        'object_type': new Set(),
+        'location_precision': new Set()
+    };
+
+    // Track which values exist for each filter field
+    var filterValues = {
+        'Place_name': new Set(),
+        'object_type': new Set(),
+        'location_precision': new Set()
+    };
+
+    // Populate filterValues from data
+    allFeatures.forEach(function(f) {
+        ['Place_name', 'object_type', 'location_precision'].forEach(function(field) {
+            var v = f.properties[field];
+            if (v !== null && v !== undefined && String(v).trim() !== '') {
+                filterValues[field].add(String(v).trim());
+            }
+        });
+    });
+
+    // === Map setup ===
+    var map = L.map('map', {
+        zoomControl: true,
+        maxZoom: 28,
+        minZoom: 1
+    }).fitBounds([[22.2722721409524, 113.92880991180714], [22.2749864307189, 113.93334537739695]]);
+
+    // Hash for permalink
+    new L.Hash(map);
+
+    // Attribution
+    map.attributionControl.setPrefix(
+        '<a href="https://github.com/qgis2web/qgis2web" target="_blank">qgis2web</a> &middot; ' +
+        '<a href="https://leafletjs.com" target="_blank">Leaflet</a>'
+    );
+
+    // === Raster layers (same as index.html) ===
+    map.createPane('pane_OPM100_2025_0');
+    map.getPane('pane_OPM100_2025_0').style.zIndex = 400;
+    var layer_OPM100 = L.imageOverlay('data/OPM100_2025_0.png',
+        [[22.076205181083964, 113.75167100210537], [22.624727555473488, 114.51155829843452]],
+        { pane: 'pane_OPM100_2025_0' });
+    layer_OPM100.addTo(map);
+
+    map.createPane('pane_9SEA_1');
+    map.getPane('pane_9SEA_1').style.zIndex = 401;
+    var layer_9SEA = L.imageOverlay('data/9SEA_1.png',
+        [[22.273607952312364, 113.89769308407159], [22.300758044667496, 113.93413201704129]],
+        { pane: 'pane_9SEA_1' });
+    layer_9SEA.addTo(map);
+
+    map.createPane('pane_9SEC_2');
+    map.getPane('pane_9SEC_2').style.zIndex = 402;
+    var layer_9SEC = L.imageOverlay('data/9SEC_2.png',
+        [[22.246516297786957, 113.89774686844221], [22.273666401328807, 113.93417871714662]],
+        { pane: 'pane_9SEC_2' });
+    layer_9SEC.addTo(map);
+
+    map.createPane('pane_63D9SE13A00_3');
+    map.getPane('pane_63D9SE13A00_3').style.zIndex = 403;
+    var layer_63A = L.imageOverlay('data/63D9SE13A00_3.png',
+        [[22.273657271849242, 113.92684329169057], [22.27908664550362, 113.93412996017085]],
+        { pane: 'pane_63D9SE13A00_3' });
+    layer_63A.addTo(map);
+
+    map.createPane('pane_63D9SE13C00_4');
+    map.getPane('pane_63D9SE13C00_4').style.zIndex = 404;
+    var layer_63C = L.imageOverlay('data/63D9SE13C00_4.png',
+        [[22.26823893534846, 113.92685292077452], [22.27366830962505, 113.93413930605514]],
+        { pane: 'pane_63D9SE13C00_4' });
+    layer_63C.addTo(map);
+
+    // === Marker cluster group ===
+    var clusterGroup = L.markerClusterGroup({
+        showCoverageOnHover: false,
+        spiderfyDistanceMultiplier: 2,
+        maxClusterRadius: 40
+    });
+    clusterGroup.addTo(map);
+
+    // === Build filter UI ===
+    function buildFilterUI() {
+        var fieldLabels = {
+            'Place_name': 'Place Name',
+            'object_type': 'Photo Subject',
+            'location_precision': 'Location Precision'
+        };
+
+        ['Place_name', 'object_type', 'location_precision'].forEach(function(field) {
+            var container = document.getElementById('filter-' + field);
+            var values = Array.from(filterValues[field]).sort();
+            var countEl = document.getElementById('count-' + field);
+            countEl.textContent = values.length + ' values';
+
+            // Add "(empty)" option if there are null values
+            var hasNull = allFeatures.some(function(f) {
+                var v = f.properties[field];
+                return v === null || v === undefined || String(v).trim() === '';
+            });
+
+            var html = '';
+            values.forEach(function(val) {
+                var count = allFeatures.filter(function(f) {
+                    var v = f.properties[field];
+                    return v !== null && v !== undefined && String(v).trim() === val;
+                }).length;
+                html += '<div class="checkbox-item">' +
+                    '<input type="checkbox" id="cb-' + field + '-' + val.replace(/[^a-zA-Z0-9]/g, '_') + '" ' +
+                    'data-field="' + field + '" data-value="' + val.replace(/"/g, '&quot;') + '" checked>' +
+                    '<label for="cb-' + field + '-' + val.replace(/[^a-zA-Z0-9]/g, '_') + '">' + val + '</label>' +
+                    '<span class="item-count">' + count + '</span>' +
+                    '</div>';
+            });
+            if (hasNull) {
+                var nullCount = allFeatures.filter(function(f) {
+                    var v = f.properties[field];
+                    return v === null || v === undefined || String(v).trim() === '';
+                }).length;
+                html += '<div class="checkbox-item">' +
+                    '<input type="checkbox" id="cb-' + field + '-_null_" data-field="' + field + '" data-value="__NULL__" checked>' +
+                    '<label for="cb-' + field + '-_null_">(no data)</label>' +
+                    '<span class="item-count">' + nullCount + '</span>' +
+                    '</div>';
+            }
+            container.innerHTML = html;
+
+            // Initialize filterState with all values checked
+            filterState[field] = new Set(values);
+            if (hasNull) filterState[field].add('__NULL__');
+        });
+
+        // Attach change listeners
+        document.querySelectorAll('.checkbox-item input[type="checkbox"]').forEach(function(cb) {
+            cb.addEventListener('change', function() {
+                var field = this.dataset.field;
+                var value = this.dataset.value;
+                if (this.checked) {
+                    filterState[field].add(value);
+                } else {
+                    filterState[field].delete(value);
+                }
+                updateMap();
+            });
+        });
+    }
+
+    // === Check if a feature passes all filters ===
+    function passesFilters(feature) {
+        var pass = true;
+        ['Place_name', 'object_type', 'location_precision'].forEach(function(field) {
+            var v = feature.properties[field];
+            var val = (v === null || v === undefined || String(v).trim() === '') ? '__NULL__' : String(v).trim();
+            if (!filterState[field].has(val)) {
+                pass = false;
+            }
+        });
+        return pass;
+    }
+
+    // === Current selected marker ===
+    var selectedFeature = null;      // the currently selected feature
+    var selectedMarker = null;       // reference to its rendered layer
+    var markerLayer = null;          // reference to the geoJson layer inside cluster
+
+    // Unique key per feature so we can match selections across re-renders
+    function featureKey(feature) {
+        var p = feature.properties;
+        return String(p['照片總編號'] || '') + '|' + String(p['photo_path'] || '') +
+               '|' + (feature.geometry && feature.geometry.coordinates ? feature.geometry.coordinates.join(',') : '');
+    }
+
+    // === Style for markers ===
+    function markerStyle(selected) {
+        if (selected) {
+            return {
+                radius: 11,
+                fillColor: '#ffd700',
+                color: '#ff8c00',
+                weight: 4,
+                opacity: 1,
+                fillOpacity: 1
+            };
+        }
+        return {
+            radius: 6,
+            fillColor: '#e74d61',
+            color: '#ffffff',
+            weight: 2,
+            opacity: 1,
+            fillOpacity: 0.85
+        };
+    }
+
+    // === Update map: filter markers ===
+    function updateMap() {
+        // Remove old layer
+        if (markerLayer) {
+            clusterGroup.removeLayer(markerLayer);
+        }
+
+        var filteredFeatures = allFeatures.filter(passesFilters);
+
+        // Update record count
+        document.getElementById('record-count').textContent = filteredFeatures.length + ' records shown';
+
+        var selectedKey = selectedFeature ? featureKey(selectedFeature) : null;
+
+        markerLayer = L.geoJson(filteredFeatures, {
+            pointToLayer: function(feature, latlng) {
+                var isSel = selectedKey !== null && featureKey(feature) === selectedKey;
+                return L.circleMarker(latlng, markerStyle(isSel));
+            },
+            onEachFeature: function(feature, layer) {
+                layer.on('click', function(e) {
+                    L.DomEvent.stopPropagation(e);
+                    selectMarker(layer, feature);
+                });
+            }
+        });
+
+        clusterGroup.addLayer(markerLayer);
+
+        // Re-apply highlight to the previously selected marker (if still visible)
+        if (selectedFeature) {
+            var selKey = featureKey(selectedFeature);
+            markerLayer.eachLayer(function(layer) {
+                if (featureKey(layer.feature) === selKey) {
+                    selectedMarker = layer;
+                    layer.setStyle(markerStyle(true));
+                    if (layer._path) {
+                        layer._path.classList.add('marker-selected');
+                        layer.bringToFront();
+                    }
+                }
+            });
+        }
+    }
+
+    // === Select a marker and show details ===
+    function selectMarker(layer, feature) {
+        // Reset previous
+        if (selectedMarker && selectedMarker._path) {
+            selectedMarker.setStyle(markerStyle(false));
+            selectedMarker._path.classList.remove('marker-selected');
+        }
+        // Highlight new
+        selectedFeature = feature;
+        selectedMarker = layer;
+        selectedMarker.feature = feature;
+        layer.setStyle(markerStyle(true));
+        if (layer._path) {
+            layer._path.classList.add('marker-selected');
+            layer.bringToFront();
+        }
+
+        // Show detail panel
+        showDetail(feature);
+
+        // On mobile, open detail panel
+        if (window.innerWidth <= 768) {
+            openPanel('detail-panel');
+        }
+    }
+
+    // === Show photo + metadata in right panel ===
+    function showDetail(feature) {
+        var p = feature.properties;
+        var emptyEl = document.getElementById('detail-empty');
+        var contentEl = document.getElementById('detail-content');
+
+        emptyEl.style.display = 'none';
+        contentEl.style.display = 'block';
+
+        // Photo path: same logic as index.html
+        var photoPath = p['photo_path'];
+        var imgSrc = '';
+        if (photoPath !== null && photoPath !== undefined) {
+            var fileName = String(photoPath).replace(/[\\/:]/g, '_').trim();
+            imgSrc = 'images/' + fileName;
+        }
+
+        var img = document.getElementById('detail-photo-img');
+        img.src = imgSrc;
+        img.onerror = function() {
+            this.style.display = 'none';
+        };
+        img.onload = function() {
+            this.style.display = 'block';
+        };
+
+        // Title: use Place_name or photo ID
+        var title = p['Place_name'] || p['照片總編號'] || 'Photo';
+        document.getElementById('detail-title').textContent = title;
+
+        // Metadata fields (only selected ones, not all database fields)
+        var metaFields = [
+            { label: 'File Name', key: '照片總編號' },
+            { label: 'Place Name', key: 'Place_name' },
+            { label: 'Capture Date', key: '指攝日期' },
+            { label: 'Photo Subject', key: 'object_type' },
+            { label: 'Direction', key: 'setting' },
+            { label: 'Location Precision', key: 'location_precision' },
+            { label: 'Location Source', key: 'location_source' },
+            { label: 'Notes', key: 'notes' },
+            { label: 'Location Note', key: '底片編號' }
+        ];
+
+        var metaHtml = '';
+        metaFields.forEach(function(mf) {
+            var val = p[mf.key];
+            if (val !== null && val !== undefined && String(val).trim() !== '') {
+                metaHtml += '<div class="meta-row">' +
+                    '<span class="meta-label">' + mf.label + '</span>' +
+                    '<span class="meta-value">' + String(val).trim() + '</span>' +
+                    '</div>';
+            }
+        });
+        document.getElementById('detail-meta').innerHTML = metaHtml;
+    }
+
+    // === Select All / Clear ===
+    window.selectAllAll = function() {
+        ['Place_name', 'object_type', 'location_precision'].forEach(function(field) {
+            filterState[field] = new Set(filterValues[field]);
+            // Also check if there were nulls
+            var hasNull = allFeatures.some(function(f) {
+                var v = f.properties[field];
+                return v === null || v === undefined || String(v).trim() === '';
+            });
+            if (hasNull) filterState[field].add('__NULL__');
+        });
+        document.querySelectorAll('.checkbox-item input[type="checkbox"]').forEach(function(cb) {
+            cb.checked = true;
+        });
+        updateMap();
+    };
+
+    window.clearAllFilters = function() {
+        ['Place_name', 'object_type', 'location_precision'].forEach(function(field) {
+            filterState[field] = new Set();
+        });
+        document.querySelectorAll('.checkbox-item input[type="checkbox"]').forEach(function(cb) {
+            cb.checked = false;
+        });
+        updateMap();
+    };
+
+    // === Mobile panel toggle ===
+    window.togglePanel = function(panelId) {
+        var panel = document.getElementById(panelId);
+        var overlay = document.getElementById('overlay');
+        var sidebar = document.getElementById('sidebar');
+        var detail = document.getElementById('detail-panel');
+
+        if (panelId === 'sidebar') {
+            sidebar.classList.toggle('open');
+            detail.classList.remove('open');
+        } else {
+            detail.classList.toggle('open');
+            sidebar.classList.remove('open');
+        }
+
+        // Show overlay if any panel is open
+        if (sidebar.classList.contains('open') || detail.classList.contains('open')) {
+            overlay.classList.add('show');
+        } else {
+            overlay.classList.remove('show');
+        }
+    };
+
+    window.openPanel = function(panelId) {
+        var panel = document.getElementById(panelId);
+        var overlay = document.getElementById('overlay');
+        document.getElementById('sidebar').classList.remove('open');
+        document.getElementById('detail-panel').classList.remove('open');
+        panel.classList.add('open');
+        overlay.classList.add('show');
+    };
+
+    // Close panels when clicking overlay
+    document.getElementById('overlay').addEventListener('click', function() {
+        document.getElementById('sidebar').classList.remove('open');
+        document.getElementById('detail-panel').classList.remove('open');
+        this.classList.remove('show');
+    });
+
+    // === Close detail panel when clicking elsewhere on map ===
+    map.on('click', function() {
+        // Clear selection highlight
+        if (selectedMarker && selectedMarker._path) {
+            selectedMarker.setStyle(markerStyle(false));
+            selectedMarker._path.classList.remove('marker-selected');
+        }
+        selectedMarker = null;
+        selectedFeature = null;
+
+        // On mobile, close detail panel
+        if (window.innerWidth <= 768) {
+            document.getElementById('detail-panel').classList.remove('open');
+            document.getElementById('overlay').classList.remove('show');
+        }
+    });
+
+    // === Init ===
+    buildFilterUI();
+    updateMap();
+
+    // Fix map size after layout settles
+    setTimeout(function() { map.invalidateSize(); }, 200);
+
+    // Keep the map correctly sized on viewport / orientation changes
+    window.addEventListener('resize', function() {
+        map.invalidateSize();
+    });
+    window.addEventListener('orientationchange', function() {
+        setTimeout(function() { map.invalidateSize(); }, 250);
+    });
+
+    // Also re-validate when a mobile panel is closed (layout shifts)
+    document.getElementById('overlay').addEventListener('click', function() {
+        setTimeout(function() { map.invalidateSize(); }, 320);
+    });
+
+})();
+</script>
+</body>
+</html>
