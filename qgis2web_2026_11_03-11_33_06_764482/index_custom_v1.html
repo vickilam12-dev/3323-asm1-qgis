@@ -164,6 +164,139 @@
     ::-webkit-scrollbar-thumb { background: #ccc; border-radius: 3px; }
     ::-webkit-scrollbar-thumb:hover { background: #aaa; }
 
+    /* === Layer opacity control panel === */
+    .opacity-panel {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        z-index: 1000;
+        background: rgba(255,255,255,0.95);
+        border: 1px solid #ccc;
+        border-radius: 8px;
+        box-shadow: 0 2px 12px rgba(0,0,0,0.15);
+        width: 240px;
+        max-height: 340px;
+        overflow-y: auto;
+        transition: transform 0.3s ease, opacity 0.3s ease;
+    }
+    .opacity-panel.collapsed {
+        transform: translateX(calc(100% + 20px));
+        opacity: 0;
+        pointer-events: none;
+    }
+    .opacity-panel-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 10px 12px;
+        border-bottom: 1px solid #eee;
+        cursor: pointer;
+        user-select: none;
+    }
+    .opacity-panel-title {
+        font-size: 13px;
+        font-weight: 700;
+        color: #333;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+    .opacity-panel-toggle {
+        font-size: 14px;
+        color: #888;
+        cursor: pointer;
+        transition: transform 0.3s;
+    }
+    .opacity-panel.collapsed .opacity-panel-toggle {
+        transform: rotate(180deg);
+    }
+    .opacity-panel-body {
+        padding: 8px 12px 12px;
+    }
+    .opacity-row {
+        margin-bottom: 10px;
+    }
+    .opacity-row:last-child { margin-bottom: 0; }
+    .opacity-row-top {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 4px;
+    }
+    .opacity-row-label {
+        font-size: 11px;
+        font-weight: 600;
+        color: #555;
+        flex: 1;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+    .opacity-row-value {
+        font-size: 11px;
+        color: #888;
+        font-weight: 400;
+        min-width: 32px;
+        text-align: right;
+    }
+    .opacity-row input[type="range"] {
+        -webkit-appearance: none;
+        appearance: none;
+        width: 100%;
+        height: 4px;
+        border-radius: 2px;
+        background: #ddd;
+        outline: none;
+        cursor: pointer;
+    }
+    .opacity-row input[type="range"]::-webkit-slider-thumb {
+        -webkit-appearance: none;
+        appearance: none;
+        width: 14px;
+        height: 14px;
+        border-radius: 50%;
+        background: #e74d61;
+        cursor: pointer;
+        border: 2px solid #fff;
+        box-shadow: 0 1px 4px rgba(0,0,0,0.2);
+    }
+    .opacity-row input[type="range"]::-moz-range-thumb {
+        width: 14px;
+        height: 14px;
+        border-radius: 50%;
+        background: #e74d61;
+        cursor: pointer;
+        border: 2px solid #fff;
+        box-shadow: 0 1px 4px rgba(0,0,0,0.2);
+    }
+    /* Floating button to show panel when collapsed */
+    .opacity-fab {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        z-index: 999;
+        background: #fff;
+        border: 1px solid #ccc;
+        border-radius: 8px;
+        box-shadow: 0 2px 12px rgba(0,0,0,0.15);
+        padding: 8px 14px;
+        font-size: 13px;
+        font-weight: 600;
+        color: #555;
+        cursor: pointer;
+        display: none;
+        align-items: center;
+        gap: 6px;
+        transition: background 0.15s;
+    }
+    .opacity-fab:hover { background: #f8f8f8; }
+    .opacity-fab.show { display: flex; }
+
+    /* On mobile, move opacity panel below toggle buttons */
+    @media (max-width: 768px) {
+        .opacity-panel { top: 48px; right: 10px; width: 200px; max-height: 280px; }
+        .opacity-fab { top: 48px; right: 10px; }
+    }
+
     /* === Responsive === */
     /* Tablet */
     @media (max-width: 1024px) {
@@ -244,6 +377,18 @@
             <i class="fas fa-image"></i> Detail
         </button>
         <div id="map"></div>
+
+        <!-- Layer opacity control -->
+        <div class="opacity-fab" id="opacity-fab" onclick="toggleOpacityPanel()">
+            <i class="fas fa-sliders-h"></i> Layers
+        </div>
+        <div class="opacity-panel" id="opacity-panel">
+            <div class="opacity-panel-header" onclick="toggleOpacityPanel()">
+                <span class="opacity-panel-title"><i class="fas fa-layer-group"></i>&nbsp; Map Layers</span>
+                <span class="opacity-panel-toggle"><i class="fas fa-chevron-right"></i></span>
+            </div>
+            <div class="opacity-panel-body" id="opacity-panel-body"></div>
+        </div>
     </div>
 
     <!-- Right: Photo + Metadata -->
@@ -322,12 +467,16 @@
     );
 
     // === Raster layers (same as index.html) ===
+    // Store layer references for opacity control
+    var rasterLayers = [];
+
     map.createPane('pane_OPM100_2025_0');
     map.getPane('pane_OPM100_2025_0').style.zIndex = 400;
     var layer_OPM100 = L.imageOverlay('data/OPM100_2025_0.png',
         [[22.076205181083964, 113.75167100210537], [22.624727555473488, 114.51155829843452]],
         { pane: 'pane_OPM100_2025_0' });
     layer_OPM100.addTo(map);
+    rasterLayers.push({ name: 'OPM100 2025', layer: layer_OPM100, pane: 'pane_OPM100_2025_0', opacity: 1 });
 
     map.createPane('pane_9SEA_1');
     map.getPane('pane_9SEA_1').style.zIndex = 401;
@@ -335,6 +484,7 @@
         [[22.273607952312364, 113.89769308407159], [22.300758044667496, 113.93413201704129]],
         { pane: 'pane_9SEA_1' });
     layer_9SEA.addTo(map);
+    rasterLayers.push({ name: '9SEA Aerial', layer: layer_9SEA, pane: 'pane_9SEA_1', opacity: 1 });
 
     map.createPane('pane_9SEC_2');
     map.getPane('pane_9SEC_2').style.zIndex = 402;
@@ -342,6 +492,7 @@
         [[22.246516297786957, 113.89774686844221], [22.273666401328807, 113.93417871714662]],
         { pane: 'pane_9SEC_2' });
     layer_9SEC.addTo(map);
+    rasterLayers.push({ name: '9SEC Aerial', layer: layer_9SEC, pane: 'pane_9SEC_2', opacity: 1 });
 
     map.createPane('pane_63D9SE13A00_3');
     map.getPane('pane_63D9SE13A00_3').style.zIndex = 403;
@@ -349,6 +500,7 @@
         [[22.273657271849242, 113.92684329169057], [22.27908664550362, 113.93412996017085]],
         { pane: 'pane_63D9SE13A00_3' });
     layer_63A.addTo(map);
+    rasterLayers.push({ name: '63D9SE13A00', layer: layer_63A, pane: 'pane_63D9SE13A00_3', opacity: 1 });
 
     map.createPane('pane_63D9SE13C00_4');
     map.getPane('pane_63D9SE13C00_4').style.zIndex = 404;
@@ -356,6 +508,52 @@
         [[22.26823893534846, 113.92685292077452], [22.27366830962505, 113.93413930605514]],
         { pane: 'pane_63D9SE13C00_4' });
     layer_63C.addTo(map);
+    rasterLayers.push({ name: '63D9SE13C00', layer: layer_63C, pane: 'pane_63D9SE13C00_4', opacity: 1 });
+
+    // === Build layer opacity sliders ===
+    function buildOpacityPanel() {
+        var body = document.getElementById('opacity-panel-body');
+        var html = '';
+        rasterLayers.forEach(function(rl, idx) {
+            var pct = Math.round(rl.opacity * 100);
+            html += '<div class="opacity-row">' +
+                '<div class="opacity-row-top">' +
+                '<span class="opacity-row-label">' + rl.name + '</span>' +
+                '<span class="opacity-row-value" id="opacity-val-' + idx + '">' + pct + '%</span>' +
+                '</div>' +
+                '<input type="range" min="0" max="100" value="' + pct + '" ' +
+                'data-layer-idx="' + idx + '" id="opacity-slider-' + idx + '">' +
+                '</div>';
+        });
+        body.innerHTML = html;
+
+        // Attach slider listeners
+        rasterLayers.forEach(function(rl, idx) {
+            var slider = document.getElementById('opacity-slider-' + idx);
+            var valEl = document.getElementById('opacity-val-' + idx);
+            slider.addEventListener('input', function() {
+                var val = parseInt(this.value, 10);
+                var opacity = val / 100;
+                rl.opacity = opacity;
+                // Set opacity on the pane (affects the image overlay)
+                map.getPane(rl.pane).style.opacity = opacity;
+                valEl.textContent = val + '%';
+            });
+        });
+    }
+
+    // === Toggle opacity panel show/hide ===
+    window.toggleOpacityPanel = function() {
+        var panel = document.getElementById('opacity-panel');
+        var fab = document.getElementById('opacity-fab');
+        if (panel.classList.contains('collapsed')) {
+            panel.classList.remove('collapsed');
+            fab.classList.remove('show');
+        } else {
+            panel.classList.add('collapsed');
+            fab.classList.add('show');
+        }
+    };
 
     // === Marker cluster group ===
     var clusterGroup = L.markerClusterGroup({
@@ -691,6 +889,7 @@
 
     // === Init ===
     buildFilterUI();
+    buildOpacityPanel();
     updateMap();
 
     // Fix map size after layout settles
