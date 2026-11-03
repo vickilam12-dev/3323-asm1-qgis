@@ -227,6 +227,11 @@
             <div class="checkbox-list" id="filter-location_precision"></div>
         </div>
 
+        <div class="filter-section">
+            <div class="filter-title">Setting <span class="filter-count" id="count-setting"></span></div>
+            <div class="checkbox-list" id="filter-setting"></div>
+        </div>
+
         <div class="record-count" id="record-count">0 records</div>
     </div>
 
@@ -278,19 +283,21 @@
     var filterState = {
         'Place_name': new Set(),
         'object_type': new Set(),
-        'location_precision': new Set()
+        'location_precision': new Set(),
+        'setting': new Set()
     };
 
     // Track which values exist for each filter field
     var filterValues = {
         'Place_name': new Set(),
         'object_type': new Set(),
-        'location_precision': new Set()
+        'location_precision': new Set(),
+        'setting': new Set()
     };
 
     // Populate filterValues from data
     allFeatures.forEach(function(f) {
-        ['Place_name', 'object_type', 'location_precision'].forEach(function(field) {
+        ['Place_name', 'object_type', 'location_precision', 'setting'].forEach(function(field) {
             var v = f.properties[field];
             if (v !== null && v !== undefined && String(v).trim() !== '') {
                 filterValues[field].add(String(v).trim());
@@ -363,10 +370,11 @@
         var fieldLabels = {
             'Place_name': 'Place Name',
             'object_type': 'Photo Subject',
-            'location_precision': 'Location Precision'
+            'location_precision': 'Location Precision',
+            'setting': 'Setting'
         };
 
-        ['Place_name', 'object_type', 'location_precision'].forEach(function(field) {
+        ['Place_name', 'object_type', 'location_precision', 'setting'].forEach(function(field) {
             var container = document.getElementById('filter-' + field);
             var values = Array.from(filterValues[field]).sort();
             var countEl = document.getElementById('count-' + field);
@@ -427,7 +435,7 @@
     // === Check if a feature passes all filters ===
     function passesFilters(feature) {
         var pass = true;
-        ['Place_name', 'object_type', 'location_precision'].forEach(function(field) {
+        ['Place_name', 'object_type', 'location_precision', 'setting'].forEach(function(field) {
             var v = feature.properties[field];
             var val = (v === null || v === undefined || String(v).trim() === '') ? '__NULL__' : String(v).trim();
             if (!filterState[field].has(val)) {
@@ -600,7 +608,7 @@
 
     // === Select All / Clear ===
     window.selectAllAll = function() {
-        ['Place_name', 'object_type', 'location_precision'].forEach(function(field) {
+        ['Place_name', 'object_type', 'location_precision', 'setting'].forEach(function(field) {
             filterState[field] = new Set(filterValues[field]);
             // Also check if there were nulls
             var hasNull = allFeatures.some(function(f) {
@@ -616,7 +624,7 @@
     };
 
     window.clearAllFilters = function() {
-        ['Place_name', 'object_type', 'location_precision'].forEach(function(field) {
+        ['Place_name', 'object_type', 'location_precision', 'setting'].forEach(function(field) {
             filterState[field] = new Set();
         });
         document.querySelectorAll('.checkbox-item input[type="checkbox"]').forEach(function(cb) {
